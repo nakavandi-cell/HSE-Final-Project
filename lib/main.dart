@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'screens/inspection_form_screen.dart';
 
 void main() {
+  // این خط برای اطمینان از مقداردهی اولیه پلاگین‌ها (مثل دیتابیس) است
+  WidgetsFlutterBinding.ensureInitialized();
+  
   runApp(const HSEApp());
 }
 
@@ -10,16 +14,15 @@ class HSEApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      title: 'HSE Inspection App',
       debugShowCheckedModeBanner: false,
-      title: 'HSE Final Project',
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('HSE Final Project'),
-        ),
-        body: const Center(
-          child: Text('HSE App is running'),
-        ),
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        useMaterial3: true,
+        // تنظیم فونت یا تم‌های فارسی در صورت نیاز در اینجا انجام می‌شود
       ),
+      // تعیین صفحه اصلی اپلیکیشن
+      home: const InspectionFormScreen(),
     );
   }
 }
