@@ -5,52 +5,78 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: zulu
           java-version: '17'
 
-      - name: Set up Flutter
+      - name: Set up Flutter 3.24.0
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.0'
-          channel: 'stable'
+          channel: stable
+          cache: true
 
-      - name: Install dependencies
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Install Dart/Flutter dependencies
         run: flutter pub get
 
-      - name: Generate and Patch Android Project
-        run: |
-          # ۱. ایجاد پروژه اندروید
-          flutter create --platforms=android --project-name hse_final_project .
-          
-          # ۲. تنظیم دقیق نسخه‌های SDK به 34 (کاملاً پایدار و سازگار با share_plus)
-          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 34/g' android/app/build.gradle
-          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 34/g' android/app/build.gradle
-          
-          # ۳. ارتقای نسخه Android Gradle Plugin به نسخه پایدار 8.1.0
-          sed -i 's/com.android.application" version ".*"/com.android.application" version "8.1.0"/g' android/settings.gradle
-          sed -i 's/kotlin("android") version ".*"/kotlin("android") version "1.8.22"/g' android/settings.gradle
-          
-          # ۴. ارتقای نسخه Gradle Wrapper به 8.4 برای سازگاری کامل با جاوا ۱۷ و SDK 34
-          sed -i 's/gradle-.*-all.zip/gradle-8.4-all.zip/g' android/gradle/wrapper/gradle-wrapper.properties
+      - name: Generate Android project
+        run: flutter create --platforms=android --project-name hse_final_project .
 
-      - name: Accept Android Licenses
+      - name: Show generated Android config before patch
+        run: |
+          echo "===== android/settings.gradle ====="
+          cat android/settings.gradle
+          echo "===== android/app/build.gradle ====="
+          cat android/app/build.gradle
+          echo "===== android/gradle/wrapper/gradle-wrapper.properties ====="
+          cat android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Patch Android config
+        run: |
+          sed -i 's/id "com.android.application" version ".*" apply false/id "com.android.application" version "8.1.0" apply false/' android/settings.gradle
+          sed -i 's/id "org.jetbrains.kotlin.android" version ".*" apply false/id "org.jetbrains.kotlin.android" version "1.9.24" apply false/' android/settings.gradle
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 34/' android/app/build.gradle
+          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 34/' android/app/build.gradle
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/' android/app/build.gradle
+          sed -i 's#distributionUrl=.*#distributionUrl=https\\://services.gradle.org/distributions/gradle-8.4-all.zip#' android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Show Android config after patch
+        run: |
+          echo "===== android/settings.gradle ====="
+          cat android/settings.gradle
+          echo "===== android/app/build.gradle ====="
+          cat android/app/build.gradle
+          echo "===== android/gradle/wrapper/gradle-wrapper.properties ====="
+          cat android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Accept Android licenses
         run: yes | flutter doctor --android-licenses
 
-      - name: Build APK
+      - name: Clean Gradle and Flutter build cache
+        run: |
+          flutter clean
+          rm -rf ~/.gradle/caches
+          rm -rf ~/.gradle/wrapper
+
+      - name: Build release APK
         run: flutter build apk --release --no-tree-shake-icons
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: hse-app-release
