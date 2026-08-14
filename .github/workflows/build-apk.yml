@@ -28,27 +28,27 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Generate Android Folder with SDK 35
+      - name: Generate and Patch Android Project
         run: |
+          # ۱. ایجاد پروژه اندروید
           flutter create --platforms=android --project-name hse_final_project .
-          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/g' android/app/build.gradle
-          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/g' android/app/build.gradle
+          
+          # ۲. تنظیم دقیق نسخه‌های SDK به 34 (کاملاً پایدار و سازگار با share_plus)
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 34/g' android/app/build.gradle
+          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 34/g' android/app/build.gradle
+          
+          # ۳. ارتقای نسخه Android Gradle Plugin به نسخه پایدار 8.1.0
+          sed -i 's/com.android.application" version ".*"/com.android.application" version "8.1.0"/g' android/settings.gradle
+          sed -i 's/kotlin("android") version ".*"/kotlin("android") version "1.8.22"/g' android/settings.gradle
+          
+          # ۴. ارتقای نسخه Gradle Wrapper به 8.4 برای سازگاری کامل با جاوا ۱۷ و SDK 34
+          sed -i 's/gradle-.*-all.zip/gradle-8.4-all.zip/g' android/gradle/wrapper/gradle-wrapper.properties
 
-      - name: Install Android SDK Platform 35
-        run: |
-          # اگر cmdline-tools نصب نبود، نصب می‌کند
-          if [ ! -f "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
-            mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
-            cd $ANDROID_SDK_ROOT/cmdline-tools
-            wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-            unzip -q commandlinetools-linux-11076708_latest.zip
-            mv cmdline-tools latest
-          fi
-          echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
-          echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Accept Android Licenses
+        run: yes | flutter doctor --android-licenses
 
       - name: Build APK
-        run: flutter build apk --release
+        run: flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
