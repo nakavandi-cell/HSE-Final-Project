@@ -6,21 +6,17 @@ class InspectionFormScreen extends StatefulWidget {
   const InspectionFormScreen({super.key});
 
   @override
-  State<InspectionFormScreen> createState() =>
-      _InspectionFormScreenState();
+  State<InspectionFormScreen> createState() => _InspectionFormScreenState();
 }
 
 class _InspectionFormScreenState extends State<InspectionFormScreen> {
   final _formKey = GlobalKey<FormState>();
-
   final TextEditingController _dateController = TextEditingController();
-  final TextEditingController _inspectorNameController =
-      TextEditingController();
-
+  final TextEditingController _inspectorNameController = TextEditingController();
+  
   String? _selectedShift;
   String? _selectedUnit;
   String? _selectedStatus;
-
   bool _isSaving = false;
 
   final List<String> _shifts = [
@@ -46,12 +42,9 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   @override
   void initState() {
     super.initState();
-
     final now = DateTime.now();
-
     _dateController.text =
-        '${now.year}/${now.month.toString().padLeft(2, '0')}/'
-        '${now.day.toString().padLeft(2, '0')}';
+        '${now.year}/${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')}';
   }
 
   Future<void> _saveInspection() async {
@@ -74,25 +67,24 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
 
       await DatabaseHelper.instance.insertInspection(inspection);
 
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('اطلاعات بازرسی با موفقیت ثبت شد.'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('اطلاعات بازرسی با موفقیت ثبت شد.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
       _clearForm();
     } catch (error) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('خطا در ثبت اطلاعات: $error'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطا در ثبت اطلاعات: $error'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -104,7 +96,6 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
 
   void _clearForm() {
     _inspectorNameController.clear();
-
     setState(() {
       _selectedShift = null;
       _selectedUnit = null;
@@ -155,15 +146,14 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                     ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'نام بازرس را وارد کنید.';
+                        return 'لطفاً نام بازرس را وارد کنید';
                       }
-
                       return null;
                     },
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
-                    initialValue: _selectedShift,
+                    value: _selectedShift,
                     decoration: const InputDecoration(
                       labelText: 'شیفت',
                       prefixIcon: Icon(Icons.access_time),
@@ -182,15 +172,14 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                     },
                     validator: (value) {
                       if (value == null) {
-                        return 'شیفت را انتخاب کنید.';
+                        return 'لطفاً شیفت را انتخاب کنید';
                       }
-
                       return null;
                     },
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
-                    initialValue: _selectedUnit,
+                    value: _selectedUnit,
                     decoration: const InputDecoration(
                       labelText: 'واحد',
                       prefixIcon: Icon(Icons.factory),
@@ -209,15 +198,14 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                     },
                     validator: (value) {
                       if (value == null) {
-                        return 'واحد را انتخاب کنید.';
+                        return 'لطفاً واحد مورد نظر را انتخاب کنید';
                       }
-
                       return null;
                     },
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
-                    initialValue: _selectedStatus,
+                    value: _selectedStatus,
                     decoration: const InputDecoration(
                       labelText: 'وضعیت بازرسی',
                       prefixIcon: Icon(Icons.health_and_safety),
@@ -236,9 +224,8 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                     },
                     validator: (value) {
                       if (value == null) {
-                        return 'وضعیت بازرسی را انتخاب کنید.';
+                        return 'لطفاً وضعیت بازرسی را انتخاب کنید';
                       }
-
                       return null;
                     },
                   ),
@@ -251,16 +238,16 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                             height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
+                              color: Colors.white,
                             ),
                           )
                         : const Icon(Icons.save),
                     label: Text(
                       _isSaving ? 'در حال ثبت...' : 'ثبت اطلاعات',
+                      style: const TextStyle(fontSize: 16),
                     ),
                     style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 16,
-                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                   ),
                 ],
