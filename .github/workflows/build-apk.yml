@@ -2,43 +2,44 @@ name: Build Flutter APK
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: دریافت فایل‌های پروژه
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: نصب Java
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          distribution: zulu
+          distribution: 'zulu'
           java-version: '17'
 
-      - name: نصب Flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: '3.24.0' # نسخه پایدار و جدید
+          channel: 'stable'
 
-      - name: بررسی نسخه Flutter
-        run: flutter --version
-
-      - name: ساخت پوشه Android
-        run: flutter create --platforms=android --project-name hse_final_project .
-
-      - name: دریافت وابستگی‌ها
+      - name: Install dependencies
         run: flutter pub get
 
-      - name: ساخت APK
+      - name: Generate Android Folder with SDK 35
+        run: |
+          flutter create --platforms=android --project-name hse_final_project .
+          # اصلاح نسخه SDK به صورت خودکار برای رفع خطای share_plus
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/g' android/app/build.gradle
+          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/g' android/app/build.gradle
+
+      - name: Build APK
         run: flutter build apk --release
 
-      - name: بارگذاری فایل APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: hse-release-apk
+          name: hse-app-release
           path: build/app/outputs/flutter-apk/app-release.apk
