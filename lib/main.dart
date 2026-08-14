@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'screens/inspection_form_screen.dart';
+import 'screens/inspection_form_screen.dart'; // فرم ثبت
+import 'screens/reports_screen.dart'; // صفحه گزارش‌ها
 
 void main() {
-  // این خط برای اطمینان از مقداردهی اولیه پلاگین‌ها (مثل دیتابیس) است
   WidgetsFlutterBinding.ensureInitialized();
-  
   runApp(const HSEApp());
 }
 
@@ -17,12 +16,25 @@ class HSEApp extends StatelessWidget {
       title: 'HSE Inspection App',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        primarySwatch: Colors.teal, // رنگ اصلی اپلیکیشن را تغییر دادیم
         useMaterial3: true,
-        // تنظیم فونت یا تم‌های فارسی در صورت نیاز در اینجا انجام می‌شود
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.teal, // رنگ نوار بالا
+          foregroundColor: Colors.white, // رنگ آیکون‌ها و متن نوار بالا
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: Colors.tealAccent, // رنگ دکمه شناور
+        ),
+        // تنظیم فونت فارسی در صورت نیاز
       ),
-      // تعیین صفحه اصلی اپلیکیشن
-      home: const InspectionFormScreen(),
+      // **صفحه اصلی اپلیکیشن را به ReportsScreen تغییر دادیم**
+      home: const ReportsScreen(), 
+      
+      // **مسیردهی برای رفتن به صفحه فرم از صفحه گزارش‌ها**
+      routes: {
+        '/': (context) => const ReportsScreen(), // مسیر اصلی
+        '/inspectionForm': (context) => const InspectionFormScreen(), // مسیر فرم ثبت
+      },
     );
   }
 }
