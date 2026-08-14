@@ -11,27 +11,33 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: دریافت فایل‌های پروژه
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: نصب Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: zulu
           java-version: '17'
 
-      - name: Set up Flutter
+      - name: نصب Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: stable
 
-      - name: Install dependencies
+      - name: بررسی نسخه Flutter
+        run: flutter --version
+
+      - name: ساخت پوشه Android
+        run: flutter create --platforms=android --project-name hse_final_project .
+
+      - name: دریافت وابستگی‌ها
         run: flutter pub get
 
-      - name: Build APK
+      - name: ساخت APK
         run: flutter build apk --release
 
-      - name: Upload APK Artifact
+      - name: بارگذاری فایل APK
         uses: actions/upload-artifact@v4
         with:
           name: hse-release-apk
