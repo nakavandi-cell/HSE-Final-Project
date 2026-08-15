@@ -8,7 +8,6 @@ import 'services/database_seeder.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // آماده‌سازی دیتابیس
   final db = await DatabaseHelper.instance.database;
   await DatabaseSeeder.seedData(db);
 
