@@ -7,7 +7,6 @@ import 'package:share_plus/share_plus.dart';
 
 import '../models/inspection_model.dart';
 import '../services/database_helper.dart';
-import 'inspection_form_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -27,84 +26,168 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Future<void> _loadInspections() async {
-    setState(() {
-      _isLoading = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
 
-    final data = await DatabaseHelper.instance.getAllInspections();
+    try {
+      final data = await DatabaseHelper.instance.getAllInspections();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      _inspections = data;
-      _isLoading = false;
-    });
+      setState(() {
+        _inspections = data;
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطا در بارگذاری گزارش‌ها: $error'),
+        ),
+      );
+    }
   }
 
   Future<void> _deleteInspection(int id) async {
-    await DatabaseHelper.instance.deleteInspection(id);
-    await _loadInspections();
+    try {
+      await DatabaseHelper.instance.deleteInspection(id);
+      await _loadInspections();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('بازرسی با موفقیت حذف شد'),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطا در حذف بازرسی: $error'),
+        ),
+      );
+    }
   }
 
   Future<void> _exportToExcel() async {
-    final excel = Excel.createExcel();
+    if (_inspections.isEmpty) return;
 
-    final sheet = excel['HSE_Report'];
+    try {
+      final excel = Excel.createExcel();
+      final sheet = excel['HSE_Report'];
 
-    if (excel.sheets.containsKey('Sheet1')) {
-      excel.delete('Sheet1');
-    }
+      if (excel.sheets.containsKey('Sheet1')) {
+        excel.delete('Sheet1');
+      }
 
-    sheet.appendRow([
-      TextCellValue('شناسه'),
-      TextCellValue('تاریخ'),
-      TextCellValue('نام بازرس'),
-      TextCellValue('شیفت'),
-      TextCellValue('واحد'),
-      TextCellValue('وضعیت'),
-    ]);
-
-    for (final inspection in _inspections) {
       sheet.appendRow([
-        TextCellValue(inspection.id?.toString() ?? ''),
-        TextCellValue(inspection.date),
-        TextCellValue(inspection.inspectorName),
-        TextCellValue(inspection.shift),
-        TextCellValue(inspection.unit),
-        TextCellValue(inspection.status),
+        TextCellValue('شناسه'),
+        TextCellValue('شناسه تجهیز'),
+        TextCellValue('تاریخ'),
+        TextCellValue('نام بازرس'),
+        TextCellValue('محل'),
+        TextCellValue('شیفت'),
+        TextCellValue('وضعیت کلی'),
       ]);
+
+      for (final inspection in _inspections) {
+        sheet.appendRow([
+          TextCellValue(inspection.id?.toString() ?? ''),
+          TextCellValue(inspection.assetId.toString()),
+          TextCellValue(inspection.date),
+          TextCellValue(inspection.inspectorName),
+          TextCellValue(inspection.location),
+          TextCellValue(inspection.shift),
+          TextCellValue(inspection.overallStatus),
+        ]);
+      }
+
+      final directory = await getApplicationDocumentsDirectory();
+
+      final filePath =
+          '${directory.path}/HSE_Report_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+
+      final fileBytes = excel.save();
+
+      if (fileBytes == null) {
+        throw Exception('فایل اکسل تولید نشد');
+      }
+
+      final file = File(filePath);
+      await file.writeAsBytes(fileBytes);
+
+      await Share.shareXFiles(
+        [XFile(filePath)],
+        text: 'گزارش بازرسی HSE',
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطا در تهیه خروجی اکسل: $error'),
+        ),
+      );
     }
-
-    final directory = await getApplicationDocumentsDirectory();
-
-    final filePath =
-        '${directory.path}/HSE_Report_${DateTime.now().millisecondsSinceEpoch}.xlsx';
-
-    final fileBytes = excel.save();
-
-    if (fileBytes == null) {
-      return;
-    }
-
-    final file = File(filePath);
-
-    await file.writeAsBytes(fileBytes);
-
-    await Share.shareXFiles(
-      [XFile(filePath)],
-      text: 'گزارش بازرسی HSE',
-    );
   }
 
-  Future<void> _openInspectionForm() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const InspectionFormScreen(),
-      ),
+  Future<void> _openAssetList() async {
+    await Navigator.pushNamed(context, '/assetList');
+
+    if (!mounted) return;
+    await _loadInspections();
+  }
+
+  Future<void> _confirmDelete(Inspection inspection) async {
+    if (inspection.id == null) return;
+
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('حذف بازرسی'),
+          content: const Text(
+            'آیا از حذف این بازرسی و پاسخ‌های مربوط به آن اطمینان دارید؟',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, false);
+              },
+              child: const Text('انصراف'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('حذف'),
+            ),
+          ],
+        );
+      },
     );
 
-    await _loadInspections();
+    if (shouldDelete == true) {
+      await _deleteInspection(inspection.id!);
+    }
+  }
+
+  bool _isSafe(String status) {
+    final normalizedStatus = status.trim().toLowerCase();
+
+    return normalizedStatus == 'ایمن' ||
+        normalizedStatus == 'safe' ||
+        normalizedStatus == 'pass';
   }
 
   @override
@@ -124,7 +207,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ),
         body: _buildBody(),
         floatingActionButton: FloatingActionButton(
-          onPressed: _openInspectionForm,
+          onPressed: _openAssetList,
           tooltip: 'ثبت بازرسی جدید',
           child: const Icon(Icons.add),
         ),
@@ -140,8 +223,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
 
     if (_inspections.isEmpty) {
-      return const Center(
-        child: Text('هیچ موردی ثبت نشده است'),
+      return RefreshIndicator(
+        onRefresh: _loadInspections,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [
+            SizedBox(height: 240),
+            Center(
+              child: Text('هیچ موردی ثبت نشده است'),
+            ),
+          ],
+        ),
       );
     }
 
@@ -152,8 +244,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         itemCount: _inspections.length,
         itemBuilder: (context, index) {
           final inspection = _inspections[index];
-
-          final isSafe = inspection.status == 'ایمن';
+          final isSafe = _isSafe(inspection.overallStatus);
 
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
@@ -164,7 +255,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 size: 32,
               ),
               title: Text(
-                'واحد: ${inspection.unit}',
+                'محل: ${inspection.location}',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                 ),
@@ -173,7 +264,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 'بازرس: ${inspection.inspectorName}\n'
                 'تاریخ: ${inspection.date} | '
                 'شیفت: ${inspection.shift}\n'
-                'وضعیت: ${inspection.status}',
+                'وضعیت کلی: ${inspection.overallStatus}',
               ),
               isThreeLine: true,
               trailing: IconButton(
@@ -182,37 +273,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   color: Colors.red,
                 ),
                 tooltip: 'حذف بازرسی',
-                onPressed: () async {
-                  final shouldDelete = await showDialog<bool>(
-                    context: context,
-                    builder: (context) {
-                      return AlertDialog(
-                        title: const Text('حذف بازرسی'),
-                        content: const Text(
-                          'آیا از حذف این بازرسی اطمینان دارید؟',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(context, false);
-                            },
-                            child: const Text('انصراف'),
-                          ),
-                          ElevatedButton(
-                            onPressed: () {
-                              Navigator.pop(context, true);
-                            },
-                            child: const Text('حذف'),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-
-                  if (shouldDelete == true && inspection.id != null) {
-                    await _deleteInspection(inspection.id!);
-                  }
-                },
+                onPressed: () => _confirmDelete(inspection),
               ),
             ),
           );
