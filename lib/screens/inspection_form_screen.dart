@@ -3,19 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/checklist_item_model.dart';
-import '../models/inspection_model.dart';
-import '../models/inspection_answer_model.dart';
 import '../services/database_helper.dart';
 import '../services/excel_service.dart';
 
 class InspectionFormScreen extends StatefulWidget {
-  final int? assetId;
+  final int assetId;
   final String assetName;
   final String assetType;
 
   const InspectionFormScreen({
     super.key,
-    this.assetId,
+    required this.assetId,
     required this.assetName,
     required this.assetType,
   });
@@ -43,28 +41,43 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   }
 
   Future<void> _loadChecklist() async {
-    // استفاده از متد تعریف شده در دیتابیس (مطمئن شو در مرحله بعد این متد را در DatabaseHelper داریم)
-    final items = await _dbHelper.getChecklistItemsByAssetType(widget.assetType);
-    setState(() {
-      _checklistItems = items;
-      _isLoading = false;
-      for (var item in items) {
-        _answers[item.id!] = {
-          'status': 'Pass',
-          'comment': '',
-          'photoPath': null,
-        };
-      }
-    });
+    try {
+      final items = await _dbHelper.getChecklistItemsByAssetType(widget.assetType);
+      if (!mounted) return;
+      setState(() {
+        _checklistItems = items;
+        _isLoading = false;
+        for (var item in items) {
+          _answers[item.id!] = {
+            'status': 'Pass',
+            'comment': '',
+            'photoPath': null,
+          };
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+      _showSnackBar('خطا در بارگذاری چک‌لیست: $e', isError: true);
+    }
   }
 
   Future<void> _pickPhoto(int itemId) async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.camera, imageQuality: 80);
-    if (pickedFile != null) {
-      setState(() {
-        _answers[itemId]?['photoPath'] = pickedFile.path;
-      });
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 80,
+      );
+      if (pickedFile != null) {
+        setState(() {
+          _answers[itemId]?['photoPath'] = pickedFile.path;
+        });
+      }
+    } catch (e) {
+      _showSnackBar('خطا در گرفتن عکس: $e', isError: true);
     }
   }
 
@@ -85,28 +98,13 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     _overallStatus = anyFail ? 'Fail' : (anyNac ? 'Conditional' : 'Pass');
 
     try {
-      final inspection = Inspection(
+      final inspectionId = await _dbHelper.insertInspectionAndAnswers(
         assetId: widget.assetId,
-        date: DateTime.now().toIso8601String(),
         inspectorName: _inspectorController.text.trim(),
         location: _locationController.text.trim(),
         overallStatus: _overallStatus,
+        answers: _answers,
       );
-
-      final db = await _dbHelper.database;
-      final inspectionId = await db.insert('inspections', inspection.toMap());
-
-      for (var item in _checklistItems) {
-        final answerData = _answers[item.id!]!;
-        final answer = InspectionAnswer(
-          inspectionId: inspectionId,
-          checklistItemId: item.id!,
-          result: answerData['status'], // در لاگ شما به جای status از result استفاده شده بود
-          comment: answerData['comment'],
-          photoPath: answerData['photoPath'],
-        );
-        await db.insert('inspection_answers', answer.toMap());
-      }
 
       _showSnackBar('بازرسی با موفقیت ثبت شد');
       if (mounted) {
