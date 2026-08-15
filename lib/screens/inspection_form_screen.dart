@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
@@ -42,7 +43,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
   }
 
   Future<void> _loadChecklist() async {
-    final db = await _dbHelper.database;
+    // استفاده از متد تعریف شده در دیتابیس (مطمئن شو در مرحله بعد این متد را در DatabaseHelper داریم)
     final items = await _dbHelper.getChecklistItemsByAssetType(widget.assetType);
     setState(() {
       _checklistItems = items;
@@ -73,7 +74,7 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
       return;
     }
 
-    if (_answers.isEmpty) {
+    if (_checklistItems.isEmpty) {
       _showSnackBar('چک‌لیستی برای این دارایی یافت نشد', isError: true);
       return;
     }
@@ -83,32 +84,36 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
     final anyNac = _answers.values.any((a) => a['status'] == 'N/A');
     _overallStatus = anyFail ? 'Fail' : (anyNac ? 'Conditional' : 'Pass');
 
-    final inspection = Inspection(
-      assetId: widget.assetId,
-      date: DateTime.now().toIso8601String(),
-      inspectorName: _inspectorController.text.trim(),
-      location: _locationController.text.trim(),
-      overallStatus: _overallStatus,
-    );
-
-    final db = await _dbHelper.database;
-    final inspectionId = await db.insert('inspections', inspection.toMap());
-
-    for (var item in _checklistItems) {
-      final answerData = _answers[item.id!]!;
-      final answer = InspectionAnswer(
-        inspectionId: inspectionId,
-        checklistItemId: item.id!,
-        status: answerData['status'],
-        comment: answerData['comment'],
-        photoPath: answerData['photoPath'],
+    try {
+      final inspection = Inspection(
+        assetId: widget.assetId,
+        date: DateTime.now().toIso8601String(),
+        inspectorName: _inspectorController.text.trim(),
+        location: _locationController.text.trim(),
+        overallStatus: _overallStatus,
       );
-      await db.insert('inspection_answers', answer.toMap());
-    }
 
-    _showSnackBar('بازرسی با موفقیت ثبت شد');
-    if (mounted) {
-      Navigator.pop(context, true);
+      final db = await _dbHelper.database;
+      final inspectionId = await db.insert('inspections', inspection.toMap());
+
+      for (var item in _checklistItems) {
+        final answerData = _answers[item.id!]!;
+        final answer = InspectionAnswer(
+          inspectionId: inspectionId,
+          checklistItemId: item.id!,
+          result: answerData['status'], // در لاگ شما به جای status از result استفاده شده بود
+          comment: answerData['comment'],
+          photoPath: answerData['photoPath'],
+        );
+        await db.insert('inspection_answers', answer.toMap());
+      }
+
+      _showSnackBar('بازرسی با موفقیت ثبت شد');
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      _showSnackBar('خطا در ثبت بازرسی: $e', isError: true);
     }
   }
 
@@ -260,3 +265,48 @@ class _InspectionFormScreenState extends State<InspectionFormScreen> {
                                     Row(
                                       children: [
                                         IconButton(
+                                          icon: const Icon(Icons.camera_alt),
+                                          onPressed: () => _pickPhoto(item.id!),
+                                        ),
+                                        if (answer['photoPath'] != null)
+                                          Padding(
+                                            padding: const EdgeInsets.only(left: 8.0),
+                                            child: Image.file(
+                                              File(answer['photoPath']),
+                                              width: 50,
+                                              height: 50,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                        const Spacer(),
+                                        if (answer['photoPath'] != null)
+                                          const Text('تصویر ثبت شد', style: TextStyle(color: Colors.green, fontSize: 12)),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: _submitInspection,
+                          icon: const Icon(Icons.save),
+                          label: const Text('ثبت بازرسی نهایی'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueAccent,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+    );
+  }
+}
