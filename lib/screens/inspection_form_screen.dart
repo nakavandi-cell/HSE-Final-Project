@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // برای فرمت تاریخ
+import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import '../models/checklist_item_model.dart';
 import '../models/inspection_model.dart';
-import '../models/inspection_answer_model.dart'; // اضافه شده
+import '../models/inspection_answer_model.dart';
 import '../services/database_helper.dart';
-import '../models/asset_model.dart'; // برای دریافت اطلاعات Asset
-import '../models/checklist_model.dart'; // برای دریافت اطلاعات Checklist
-import '../models/checklist_item_model.dart'; // برای دریافت اطلاعات ChecklistItem
+import '../services/excel_service.dart';
 
 class InspectionFormScreen extends StatefulWidget {
-  final int? assetId; // دریافت ID دارایی
-  final String? assetName; // دریافت نام دارایی
-  final String? assetType; // دریافت نوع دارایی
+  final int? assetId;
+  final String assetName;
+  final String assetType;
 
   const InspectionFormScreen({
     super.key,
     this.assetId,
-    this.assetName,
-    this.assetType,
+    required this.assetName,
+    required this.assetType,
   });
 
   @override
@@ -24,234 +24,239 @@ class InspectionFormScreen extends StatefulWidget {
 }
 
 class _InspectionFormScreenState extends State<InspectionFormScreen> {
-  final _formKey = GlobalKey<FormState>();
-  late TextEditingController _inspectorNameController;
-  late TextEditingController _shiftController;
-  late TextEditingController _remarksController;
-  String _selectedStatus = 'ایمن'; // وضعیت پیش‌فرض
+  final DatabaseHelper _dbHelper = DatabaseHelper.instance;
+  final TextEditingController _inspectorController = TextEditingController();
+  final TextEditingController _locationController = TextEditingController();
+
   List<ChecklistItem> _checklistItems = [];
-  List<String> _results = []; // برای ذخیره نتایج هر آیتم
-  List<TextEditingController> _commentControllers = []; // برای کامنت‌های هر آیتم
-  List<String?> _selectedPhotos = []; // برای مسیر عکس‌ها
+  bool _isLoading = true;
+  String _overallStatus = 'Pass';
+
+  // Each answer maps checklistItemId -> {status, comment, photoPath}
+  final Map<int, Map<String, dynamic>> _answers = {};
 
   @override
   void initState() {
     super.initState();
-    _inspectorNameController = TextEditingController();
-    _shiftController = TextEditingController();
-    _remarksController = TextEditingController();
-    _loadChecklistItems();
+    _loadChecklist();
   }
 
-  @override
-  void dispose() {
-    _inspectorNameController.dispose();
-    _shiftController.dispose();
-    _remarksController.dispose();
-    for (var controller in _commentControllers) {
-      controller.dispose();
-    }
-    super.dispose();
+  Future<void> _loadChecklist() async {
+    final db = await _dbHelper.database;
+    final items = await _dbHelper.getChecklistItemsByAssetType(widget.assetType);
+    setState(() {
+      _checklistItems = items;
+      _isLoading = false;
+      for (var item in items) {
+        _answers[item.id!] = {
+          'status': 'Pass',
+          'comment': '',
+          'photoPath': null,
+        };
+      }
+    });
   }
 
-  Future<void> _loadChecklistItems() async {
-    if (widget.assetId == null || widget.assetType == null) {
-      // اگر اطلاعات دارایی نداریم، نمی‌توانیم چک‌لیست را بارگذاری کنیم
-      // این حالت نباید رخ دهد چون از AssetListScreen می‌آییم
-      return;
-    }
-
-    final db = DatabaseHelper.instance.database;
-    final checklist = await (await db).query(
-      'checklists',
-      where: 'assetType = ?',
-      whereArgs: [widget.assetType],
-      limit: 1,
-    );
-
-    if (checklist.isNotEmpty) {
-      final checklistId = checklist.first['id'] as int;
-      final items = await (await db).query(
-        'checklist_items',
-        where: 'checklistId = ?',
-        whereArgs: [checklistId],
-        orderBy: 'orderNo ASC', // فرض می‌کنیم orderNo داریم، اگر نه، id را استفاده می‌کنیم
-      );
-
+  Future<void> _pickPhoto(int itemId) async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.camera, imageQuality: 80);
+    if (pickedFile != null) {
       setState(() {
-        _checklistItems = items.map((item) => ChecklistItem.fromMap(item)).toList();
-        // مقداردهی اولیه نتایج و کامنت‌ها
-        _results = List.filled(_checklistItems.length, 'Pass'); // پیش‌فرض Pass
-        _commentControllers = List.generate(_checklistItems.length, (_) => TextEditingController());
-        _selectedPhotos = List.filled(_checklistItems.length, null);
+        _answers[itemId]?['photoPath'] = pickedFile.path;
       });
     }
   }
 
-  Future<void> _saveInspection() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-    if (widget.assetId == null || widget.assetType == null || _checklistItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('خطا: اطلاعات دارایی یا چک‌لیست ناقص است.')));
+  Future<void> _submitInspection() async {
+    if (_inspectorController.text.trim().isEmpty) {
+      _showSnackBar('لطفاً نام بازرس را وارد کنید', isError: true);
       return;
     }
 
-    final db = DatabaseHelper.instance.database;
+    if (_answers.isEmpty) {
+      _showSnackBar('چک‌لیستی برای این دارایی یافت نشد', isError: true);
+      return;
+    }
+
+    // Determine overall status
+    final anyFail = _answers.values.any((a) => a['status'] == 'Fail');
+    final anyNac = _answers.values.any((a) => a['status'] == 'N/A');
+    _overallStatus = anyFail ? 'Fail' : (anyNac ? 'Conditional' : 'Pass');
+
     final inspection = Inspection(
-      assetId: widget.assetId!,
-      checklistId: _checklistItems.first.checklistId, // فعلا اولی را می‌گیریم، باید درست انتخاب شود
-      date: DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now()),
-      inspectorName: _inspectorNameController.text,
-      shift: _shiftController.text,
-      overallStatus: _selectedStatus,
-      remarks: _remarksController.text,
+      assetId: widget.assetId,
+      date: DateTime.now().toIso8601String(),
+      inspectorName: _inspectorController.text.trim(),
+      location: _locationController.text.trim(),
+      overallStatus: _overallStatus,
     );
 
-    try {
-      final inspectionId = await (await db).insert('inspections', inspection.toMap());
+    final db = await _dbHelper.database;
+    final inspectionId = await db.insert('inspections', inspection.toMap());
 
-      // ذخیره پاسخ‌های آیتم‌ها
-      for (int i = 0; i < _checklistItems.length; i++) {
-        final answer = InspectionAnswer(
-          inspectionId: inspectionId,
-          checklistItemId: _checklistItems[i].id!,
-          result: _results[i],
-          // comment: _commentControllers[i].text, // فعلا کامنت ذخیره نمی‌شود
-          // photoPath: _selectedPhotos[i], // فعلا عکس ذخیره نمی‌شود
-        );
-        await (await db).insert('inspection_answers', answer.toMap());
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('بازرسی با موفقیت ثبت شد!')));
-      // رفتن به صفحه لیست دارایی‌ها یا گزارش‌ها بعد از ذخیره
-      Navigator.pop(context); // بازگشت به صفحه قبل
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در ثبت بازرسی: $e')));
+    for (var item in _checklistItems) {
+      final answerData = _answers[item.id!]!;
+      final answer = InspectionAnswer(
+        inspectionId: inspectionId,
+        checklistItemId: item.id!,
+        status: answerData['status'],
+        comment: answerData['comment'],
+        photoPath: answerData['photoPath'],
+      );
+      await db.insert('inspection_answers', answer.toMap());
     }
+
+    _showSnackBar('بازرسی با موفقیت ثبت شد');
+    if (mounted) {
+      Navigator.pop(context, true);
+    }
+  }
+
+  Future<void> _exportToExcel() async {
+    try {
+      await ExcelService.exportInspectionToExcel(
+        assetName: widget.assetName,
+        assetType: widget.assetType,
+        inspectorName: _inspectorController.text.trim(),
+        checklistItems: _checklistItems,
+        answers: _answers,
+      );
+      _showSnackBar('فایل Excel با موفقیت ذخیره شد');
+    } catch (e) {
+      _showSnackBar('خطا در ذخیره Excel: $e', isError: true);
+    }
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _inspectorController.dispose();
+    _locationController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final dateString = DateFormat('yyyy/MM/dd – HH:mm').format(DateTime.now());
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('بازرسی ${widget.assetName ?? ''} (${widget.assetType ?? ''})'),
+        title: Text('بازرسی: ${widget.assetName}'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.table_chart),
+            tooltip: 'خروجی Excel',
+            onPressed: _checklistItems.isEmpty ? null : _exportToExcel,
+          ),
+        ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              // بخش اطلاعات بازرسی
-              TextFormField(
-                controller: _inspectorNameController,
-                decoration: const InputDecoration(labelText: 'نام بازرس'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'لطفاً نام بازرس را وارد کنید';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _shiftController,
-                decoration: const InputDecoration(labelText: 'شیفت'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'لطفاً شیفت را وارد کنید';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 20),
-
-              // بخش وضعیت کلی
-              const Text('وضعیت کلی:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              DropdownButtonFormField<String>(
-                value: _selectedStatus,
-                items: ['ایمن', 'ناایمن'].map((String value) {
-                  return DropdownMenuItem<String>(value: value, child: Text(value));
-                }).toList(),
-                onChanged: (newValue) {
-                  setState(() {
-                    _selectedStatus = newValue!;
-                  });
-                },
-                decoration: const InputDecoration(labelText: 'انتخاب وضعیت'),
-              ),
-              const SizedBox(height: 20),
-
-              // بخش چک‌لیست آیتم‌ها
-              if (_checklistItems.isNotEmpty)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('جزئیات بازرسی:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 10),
-                    ...List.generate(_checklistItems.length, (index) {
-                      final item = _checklistItems[index];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 8.0),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _checklistItems.isEmpty
+              ? const Center(child: Text('چک‌لیستی برای این نوع دارایی تعریف نشده است'))
+              : Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      Card(
                         child: Padding(
                           padding: const EdgeInsets.all(12.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(item.question, style: const TextStyle(fontWeight: FontWeight.w500)),
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  Radio<String>(
-                                    value: 'Pass',
-                                    groupValue: _results[index],
-                                    onChanged: (value) {
-                                      setState(() => _results[index] = value!);
-                                    },
-                                  ),
-                                  const Text('سالم'),
-                                  const SizedBox(width: 20),
-                                  Radio<String>(
-                                    value: 'Fail',
-                                    groupValue: _results[index],
-                                    onChanged: (value) {
-                                      setState(() => _results[index] = value!);
-                                    },
-                                  ),
-                                  const Text('ناقص'),
-                                ],
+                              Text('نوع دارایی: ${widget.assetType}', style: Theme.of(context).textTheme.titleMedium),
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: _inspectorController,
+                                decoration: const InputDecoration(
+                                  labelText: 'نام بازرس *',
+                                  prefixIcon: Icon(Icons.person),
+                                  border: OutlineInputBorder(),
+                                ),
                               ),
-                              // TODO: Add comment field and photo upload later
-                              // TextFormField(
-                              //   controller: _commentControllers[index],
-                              //   decoration: InputDecoration(labelText: 'توضیحات (اختیاری)'),
-                              // ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: _locationController,
+                                decoration: const InputDecoration(
+                                  labelText: 'موقعیت مکانی',
+                                  prefixIcon: Icon(Icons.location_on),
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text('تاریخ بازرسی: $dateString', style: Theme.of(context).textTheme.bodySmall),
                             ],
                           ),
                         ),
-                      );
-                    }),
-                  ],
-                )
-              else if (widget.assetType != null) // اگر نوع دارایی داریم اما چک‌لیست بار نشد
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20.0),
-                  child: Text('برای این نوع دارایی، چک‌لیستی یافت نشد یا در حال بارگذاری است.'),
-                ),
-
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: _remarksController,
-                decoration: const InputDecoration(labelText: 'نکات کلی بازرسی (اختیاری)'),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 30),
-              ElevatedButton(
-                onPressed: _saveInspection,
-                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15)),
-                child: const Text('ثبت بازرسی'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+                      ),
+                      const SizedBox(height: 16),
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: _checklistItems.length,
+                          itemBuilder: (context, index) {
+                            final item = _checklistItems[index];
+                            final answer = _answers[item.id!]!;
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${index + 1}. ${item.question}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: ChoiceChip(
+                                            label: const Text('Pass'),
+                                            selected: answer['status'] == 'Pass',
+                                            selectedColor: Colors.green.shade200,
+                                            onSelected: (_) => setState(() => answer['status'] = 'Pass'),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: ChoiceChip(
+                                            label: const Text('Fail'),
+                                            selected: answer['status'] == 'Fail',
+                                            selectedColor: Colors.red.shade200,
+                                            onSelected: (_) => setState(() => answer['status'] = 'Fail'),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: ChoiceChip(
+                                            label: const Text('N/A'),
+                                            selected: answer['status'] == 'N/A',
+                                            selectedColor: Colors.grey.shade300,
+                                            onSelected: (_) => setState(() => answer['status'] = 'N/A'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    TextField(
+                                      maxLines: 2,
+                                      decoration: const InputDecoration(
+                                        labelText: 'توضیحات / اقدام اصلاحی',
+                                        border: OutlineInputBorder(),
+                                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      ),
+                                      onChanged: (value) => answer['comment'] = value,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        IconButton(
