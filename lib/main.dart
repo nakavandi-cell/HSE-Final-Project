@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
-import 'screens/inspection_form_screen.dart'; // فرم ثبت
-import 'screens/reports_screen.dart'; // صفحه گزارش‌ها
+import 'package:sqflite/sqflite.dart'; // برای دسترسی به دیتابیس
+import 'screens/asset_list_screen.dart'; // صفحه جدید برای نمایش دارایی‌ها
+import 'screens/inspection_form_screen.dart'; // فرم فعلی ثبت بازرسی
+import 'screens/reports_screen.dart';      // صفحه گزارش‌ها
+import 'services/database_helper.dart';     // برای دسترسی به دیتابیس
+import 'services/database_seeder.dart';     // برای پر کردن اولیه دیتابیس
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final db = await DatabaseHelper.instance.database;
+  await DatabaseSeeder.seedData(db); // فراخوانی seeder برای پر کردن اولیه دیتابیس
+
   runApp(const HSEApp());
 }
 
@@ -16,24 +23,23 @@ class HSEApp extends StatelessWidget {
       title: 'HSE Inspection App',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.teal, // رنگ اصلی اپلیکیشن را تغییر دادیم
+        primarySwatch: Colors.teal,
         useMaterial3: true,
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.teal, // رنگ نوار بالا
-          foregroundColor: Colors.white, // رنگ آیکون‌ها و متن نوار بالا
+          backgroundColor: Colors.teal,
+          foregroundColor: Colors.white,
         ),
         floatingActionButtonTheme: const FloatingActionButtonThemeData(
-          backgroundColor: Colors.tealAccent, // رنگ دکمه شناور
+          backgroundColor: Colors.tealAccent,
         ),
-        // تنظیم فونت فارسی در صورت نیاز
       ),
-      // **صفحه اصلی اپلیکیشن را به ReportsScreen تغییر دادیم**
-      home: const ReportsScreen(), 
-      
-      // **مسیردهی برای رفتن به صفحه فرم از صفحه گزارش‌ها**
+      // صفحه اصلی برنامه را به AssetListScreen تغییر دادیم
+      home: const AssetListScreen(), 
       routes: {
-        '/': (context) => const ReportsScreen(), // مسیر اصلی
-        '/inspectionForm': (context) => const InspectionFormScreen(), // مسیر فرم ثبت
+        // مسیرهای احتمالی دیگر
+        '/assetList': (context) => const AssetListScreen(),
+        '/inspectionForm': (context) => const InspectionFormScreen(), // فعلا فرم بازرسی اصلی
+        '/reports': (context) => const ReportsScreen(),
       },
     );
   }
