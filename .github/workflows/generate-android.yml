@@ -50,16 +50,18 @@ jobs:
             's/(id "org\.jetbrains\.kotlin\.android" version ")[^"]+/\11.9.24/' \
             android/settings.gradle
 
+          # به جای عدد ثابت، از متغیر پیش‌فرض Flutter استفاده می‌کنیم
+          # تا Flutter خودش compileSdk و targetSdk را روی 35 بگذارد
           sed -i \
-            's/compileSdk = flutter.compileSdkVersion/compileSdk = 34/' \
+            's/compileSdk = 34/compileSdk = flutter.compileSdkVersion/' \
             android/app/build.gradle
 
           sed -i \
-            's/targetSdk = flutter.targetSdkVersion/targetSdk = 34/' \
+            's/targetSdk = 34/targetSdk = flutter.targetSdkVersion/' \
             android/app/build.gradle
 
           sed -i \
-            's/minSdk = flutter.minSdkVersion/minSdk = 21/' \
+            's/minSdk = 21/minSdk = flutter.minSdkVersion/' \
             android/app/build.gradle
 
           sed -i \
