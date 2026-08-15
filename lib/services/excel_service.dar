@@ -1,38 +1,109 @@
+// lib/services/excel_service.dart
+
 import 'dart:io';
+
 import 'package:excel/excel.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../models/checklist_item_model.dart';
+
 class ExcelService {
+  ExcelService._();
+
   static Future<void> exportInspectionToExcel({
     required String assetName,
     required String assetType,
     required String inspectorName,
-    required List<dynamic> checklistItems,
+    required List<ChecklistItem> checklistItems,
     required Map<int, Map<String, dynamic>> answers,
   }) async {
-    var excel = Excel.createExcel();
-    Sheet sheetObject = excel['InspectionReport'];
+    try {
+      final Excel excel = Excel.createExcel();
 
-    sheetObject.appendRow(['Asset', 'Type', 'Inspector', 'Date', 'Question', 'Status', 'Comment']);
+      const String sheetName = 'InspectionReport';
+      final Sheet sheet = excel[sheetName];
 
-    for (var item in checklistItems) {
-      final answer = answers[item.id];
-      sheetObject.appendRow([
-        assetName,
-        assetType,
-        inspectorName,
-        DateTime.now().toString(),
-        item.question,
-        answer?['status'] ?? '',
-        answer?['comment'] ?? '',
+      // حذف شیت پیش‌فرض در صورت وجود
+      if (excel.sheets.containsKey('Sheet1') && sheetName != 'Sheet1') {
+        excel.delete('Sheet1');
+      }
+
+      final DateTime exportDateTime = DateTime.now();
+      final String formattedDateTime = _formatDateTime(exportDateTime);
+
+      // عنوان ستون‌ها
+      sheet.appendRow([
+        TextCellValue('Asset'),
+        TextCellValue('Type'),
+        TextCellValue('Inspector'),
+        TextCellValue('Date'),
+        TextCellValue('Question'),
+        TextCellValue('Status'),
+        TextCellValue('Comment'),
       ]);
+
+      for (final ChecklistItem item in checklistItems) {
+        final int? itemId = item.id;
+
+        final Map<String, dynamic>? answer =
+            itemId == null ? null : answers[itemId];
+
+        final String status =
+            answer?['status']?.toString().trim() ?? '';
+
+        final String comment =
+            answer?['comment']?.toString().trim() ?? '';
+
+        sheet.appendRow([
+          TextCellValue(assetName),
+          TextCellValue(assetType),
+          TextCellValue(inspectorName),
+          TextCellValue(formattedDateTime),
+          TextCellValue(item.question),
+          TextCellValue(status),
+          TextCellValue(comment),
+        ]);
+      }
+
+      final List<int>? fileBytes = excel.save();
+
+      if (fileBytes == null) {
+        throw Exception('ساخت فایل Excel ناموفق بود.');
+      }
+
+      final Directory directory =
+          await getApplicationDocumentsDirectory();
+
+      final String fileName =
+          'Inspection_${exportDateTime.millisecondsSinceEpoch}.xlsx';
+
+      final String filePath = '${directory.path}/$fileName';
+
+      final File file = File(filePath);
+
+      await file.create(recursive: true);
+      await file.writeAsBytes(fileBytes, flush: true);
+
+      await Share.shareXFiles(
+        [XFile(filePath)],
+        text: 'گزارش بازرسی دارایی: $assetName',
+        subject: 'گزارش بازرسی $assetName',
+      );
+    } catch (error) {
+      throw Exception('خطا در تهیه یا اشتراک‌گذاری گزارش Excel: $error');
     }
+  }
 
-    var directory = await getApplicationDocumentsDirectory();
-    String filePath = "${directory.path}/Inspection_${DateTime.now().millisecondsSinceEpoch}.xlsx";
-    File(filePath)..createSync(recursive: true)..writeAsBytesSync(excel.save()!);
+  static String _formatDateTime(DateTime dateTime) {
+    final String year = dateTime.year.toString().padLeft(4, '0');
+    final String month = dateTime.month.toString().padLeft(2, '0');
+    final String day = dateTime.day.toString().padLeft(2, '0');
+    final String hour = dateTime.hour.toString().padLeft(2, '0');
+    final String minute = dateTime.minute.toString().padLeft(2, '0');
+    final String second = dateTime.second.toString().padLeft(2, '0');
 
-    await Share.shareXFiles([XFile(filePath)], text: 'گزارش بازرسی دارایی: $assetName');
+    return '$year-$month-$day $hour:$minute:$second';
   }
 }
+
