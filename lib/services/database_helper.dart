@@ -251,6 +251,28 @@ class DatabaseHelper {
     );
   }
 
+  Future<int> deleteInspection(int inspectionId) async {
+    final db = await database;
+
+    return await db.transaction<int>((transaction) async {
+      // ابتدا پاسخ‌های مربوط به بازرسی حذف می‌شوند
+      await transaction.delete(
+        'inspection_answers',
+        where: 'inspectionId = ?',
+        whereArgs: [inspectionId],
+      );
+
+      // سپس خود بازرسی حذف می‌شود
+      final deletedInspectionCount = await transaction.delete(
+        'inspections',
+        where: 'id = ?',
+        whereArgs: [inspectionId],
+      );
+
+      return deletedInspectionCount;
+    });
+  }
+
   Future<void> close() async {
     final db = await database;
     await db.close();
