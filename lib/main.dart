@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:sqflite/sqflite.dart'; // برای دسترسی به دیتابیس
-import 'screens/asset_list_screen.dart'; // صفحه جدید برای نمایش دارایی‌ها
-import 'screens/inspection_form_screen.dart'; // فرم فعلی ثبت بازرسی
-import 'screens/reports_screen.dart';      // صفحه گزارش‌ها
-import 'services/database_helper.dart';     // برای دسترسی به دیتابیس
-import 'services/database_seeder.dart';     // برای پر کردن اولیه دیتابیس
+import 'screens/asset_list_screen.dart';
+import 'screens/inspection_form_screen.dart';
+import 'screens/reports_screen.dart';
+import 'services/database_helper.dart';
+import 'services/database_seeder.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // آماده‌سازی دیتابیس
   final db = await DatabaseHelper.instance.database;
-  await DatabaseSeeder.seedData(db); // فراخوانی seeder برای پر کردن اولیه دیتابیس
+  await DatabaseSeeder.seedData(db);
 
   runApp(const HSEApp());
 }
@@ -33,12 +34,10 @@ class HSEApp extends StatelessWidget {
           backgroundColor: Colors.tealAccent,
         ),
       ),
-      // صفحه اصلی برنامه را به AssetListScreen تغییر دادیم
-      home: const AssetListScreen(), 
+      home: const AssetListScreen(),
       routes: {
-        // مسیرهای احتمالی دیگر
         '/assetList': (context) => const AssetListScreen(),
-        '/inspectionForm': (context) => const InspectionFormScreen(), // فعلا فرم بازرسی اصلی
+        '/inspectionForm': (context) => const InspectionFormScreen(),
         '/reports': (context) => const ReportsScreen(),
       },
     );
