@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'screens/asset_list_screen.dart';
-import 'screens/inspection_form_screen.dart';
 import 'screens/reports_screen.dart';
 import 'services/database_helper.dart';
 import 'services/database_seeder.dart';
@@ -36,7 +35,6 @@ class HSEApp extends StatelessWidget {
       home: const AssetListScreen(),
       routes: {
         '/assetList': (context) => const AssetListScreen(),
-        '/inspectionForm': (context) => const InspectionFormScreen(),
         '/reports': (context) => const ReportsScreen(),
       },
     );
